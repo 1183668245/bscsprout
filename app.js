@@ -187,6 +187,13 @@ const els = {
   statusModalMessage: document.getElementById("statusModalMessage"),
   statusModalActions: document.getElementById("statusModalActions"),
   statusModalConfirmBtn: document.getElementById("statusModalConfirmBtn"),
+  bulkProgressToast: document.getElementById("bulkProgressToast"),
+  bulkProgressToastCard: document.getElementById("bulkProgressToastCard"),
+  bulkProgressSpinner: document.getElementById("bulkProgressSpinner"),
+  bulkProgressTitle: document.getElementById("bulkProgressTitle"),
+  bulkProgressMeta: document.getElementById("bulkProgressMeta"),
+  bulkProgressState: document.getElementById("bulkProgressState"),
+  bulkProgressDetail: document.getElementById("bulkProgressDetail"),
   toastStack: document.getElementById("toastStack"),
   roleCard: document.getElementById("roleCard"),
   gardenBadge: document.getElementById("gardenBadge"),
@@ -1005,12 +1012,21 @@ function showStatusModal(title, message, confirmTask = null, confirmLabel = "确
     window.alert(message);
     return;
   }
+  const isDanger = options.variant === "danger";
+  const isConfirm = Boolean(confirmTask) || isDanger;
   statusModalConfirmTask = confirmTask;
   resetStatusModalConfirmButton();
   els.statusModalTitle.textContent = title;
   els.statusModalMessage.textContent = message;
   if (els.statusModalHint) els.statusModalHint.textContent = options.hint || "操作确认";
-  if (els.statusModalCard) els.statusModalCard.classList.toggle("is-danger", options.variant === "danger");
+  if (els.statusModalCard) {
+    els.statusModalCard.classList.toggle("is-danger", isDanger);
+    els.statusModalCard.classList.toggle("is-confirm", isConfirm);
+    els.statusModalCard.classList.toggle("is-compact", !isConfirm);
+    els.statusModalCard.classList.remove("is-progress");
+  }
+  const closeBtn = els.statusModal?.querySelector(".module-head .btn[data-status-action='close']");
+  if (closeBtn) closeBtn.hidden = false;
   if (els.statusModalActions) els.statusModalActions.hidden = !confirmTask;
   if (els.statusModalConfirmBtn) els.statusModalConfirmBtn.textContent = confirmLabel;
   els.statusModal.hidden = false;
@@ -1019,9 +1035,29 @@ function showStatusModal(title, message, confirmTask = null, confirmLabel = "确
 function closeStatusModal() {
   statusModalConfirmTask = null;
   resetStatusModalConfirmButton();
-  if (els.statusModalCard) els.statusModalCard.classList.remove("is-danger");
+  if (els.statusModalCard) els.statusModalCard.classList.remove("is-danger", "is-progress", "is-confirm", "is-compact");
   if (els.statusModalHint) els.statusModalHint.textContent = "操作确认";
+  const closeBtn = els.statusModal?.querySelector(".module-head .btn[data-status-action='close']");
+  if (closeBtn) closeBtn.hidden = false;
   if (els.statusModal) els.statusModal.hidden = true;
+}
+
+function hideBulkPlantProgress() {
+  if (els.bulkProgressToast) els.bulkProgressToast.hidden = true;
+  if (els.bulkProgressToastCard) els.bulkProgressToastCard.classList.remove("is-done");
+  if (els.bulkProgressSpinner) els.bulkProgressSpinner.hidden = false;
+}
+
+function showBulkPlantProgress(seedName, current, total, plotId, stage = "wallet") {
+  if (!els.bulkProgressToast || !els.bulkProgressTitle) return;
+  const done = stage === "done" && current >= total;
+  if (els.bulkProgressTitle) els.bulkProgressTitle.textContent = done ? "批量种植完成" : "正在批量播种中";
+  if (els.bulkProgressMeta) els.bulkProgressMeta.textContent = `当前 ${current}/${total}`;
+  if (els.bulkProgressState) els.bulkProgressState.textContent = done ? "已全部处理完成" : stage === "chain" ? "链上确认中" : "请在钱包确认";
+  if (els.bulkProgressDetail) els.bulkProgressDetail.textContent = done ? `${seedName} · 共 ${total} 块地` : `${plotId + 1} 号地 · ${seedName}`;
+  if (els.bulkProgressToastCard) els.bulkProgressToastCard.classList.toggle("is-done", done);
+  if (els.bulkProgressSpinner) els.bulkProgressSpinner.hidden = done;
+  els.bulkProgressToast.hidden = false;
 }
 
 function short(addr) {
@@ -1727,11 +1763,18 @@ async function handleBulkPlantStart() {
       const plot = await vault.getPlot(userAddress, plotId);
       const isEmptyPlot = Number(plot.seedType) === 0 || plot.harvested || Number(plot.boundGardenVersion) !== Number(account.gardenVersion);
       if (!isEmptyPlot) throw new Error(`${plotId + 1} 号地已不是空地`);
+      showBulkPlantProgress(seedName, i + 1, plotIds.length, plotId, "wallet");
       showToast("请在钱包确认", `正在播种第 ${i + 1}/${plotIds.length} 块地：${plotId + 1} 号地`);
       const tx = await vault.plant(plotId, seedType);
+      showBulkPlantProgress(seedName, i + 1, plotIds.length, plotId, "chain");
       await handleSubmittedTx(tx, `播种 ${plotId + 1} 号地`, `播种 ${i + 1}/${plotIds.length} 确认中`);
     }
+    showBulkPlantProgress(seedName, plotIds.length, plotIds.length, plotIds[plotIds.length - 1], "done");
+    showToast("批量种植完成", `${seedName} 已连续播种 ${plotIds.length} 块地。`);
+    window.setTimeout(hideBulkPlantProgress, 1200);
   } catch (err) {
+    hideBulkPlantProgress();
+    showStatusModal("批量种植失败", err.shortMessage || err.message || String(err), null, "", { hint: "已中断" });
     showToast("批量种植失败", err.shortMessage || err.message || String(err));
     log(`批量种植失败: ${err.shortMessage || err.message || err}`);
   }
