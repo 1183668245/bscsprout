@@ -1,9 +1,9 @@
 const CONFIG = {
-  chainId: 97,
-  chainName: "BSC Testnet",
-  tokenAddress: "0x05776c2c172f8c4798c648cd1c593e6098e77777",
-  vaultAddress: "0xe4370629005e20b3Dc2e47F9953bf25ceb20Ca1F",
-  factoryAddress: "0x9FD56614a8dBf786626e5BAf2b5cC0c97077ac1E",
+  chainId: 56,
+  chainName: "BNB Smart Chain",
+  tokenAddress: "0x3891cdd9063188f8cc23f8248ee5ef2b65dd7777",
+  vaultAddress: "0x3d4E5f9Bf7D5f0D6856eb9979DdF3387E177F67A",
+  factoryAddress: "0xe62CBBbab83E2BB1e59CD1ae6AaEb186cBb4395c",
 };
 
 const DEAD_ADDRESS = "0x000000000000000000000000000000000000dEaD";
