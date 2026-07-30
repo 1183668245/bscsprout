@@ -31,6 +31,16 @@ body {
   background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 54%, #d4f5b6 76%, var(--grass-bottom) 100%);
 }
 
+a,
+button,
+.top-nav__item,
+.wallet-button,
+.primary-action,
+.secondary-action {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .visually-hidden {
   position: absolute !important;
   width: 1px;
