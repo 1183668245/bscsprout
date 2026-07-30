@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>币安萌芽</title>
   <link rel="icon" type="image/webp" href="./logo/logo.webp" />
   <link rel="apple-touch-icon" href="./logo/logo.webp" />
@@ -140,6 +140,17 @@
         <div class="actions" id="statusModalActions" hidden>
           <button class="btn" data-status-action="close">我再想想</button>
           <button class="btn btn-primary" id="statusModalConfirmBtn">确认继续</button>
+        </div>
+      </div>
+    </div>
+    <div class="bulk-progress-toast" id="bulkProgressToast" hidden aria-live="polite">
+      <div class="bulk-progress-toast-card" id="bulkProgressToastCard">
+        <span class="bulk-progress-spinner" id="bulkProgressSpinner" aria-hidden="true"></span>
+        <div class="bulk-progress-copy">
+          <div class="bulk-progress-title" id="bulkProgressTitle">正在批量播种中</div>
+          <div class="bulk-progress-meta" id="bulkProgressMeta">当前 1/3</div>
+          <div class="bulk-progress-state" id="bulkProgressState">请在钱包确认</div>
+          <div class="bulk-progress-detail" id="bulkProgressDetail">2号地 · 大豆种子</div>
         </div>
       </div>
     </div>
