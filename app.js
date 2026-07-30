@@ -675,7 +675,7 @@ function renderStealPage(steal = {}) {
   const cost = steal.cost || ethers.parseUnits("500", 18);
 
   if (els.stealQuotaValue) els.stealQuotaValue.textContent = account?.hasGarden ? `${Number(account.stealSuccessCountToday || 0)}/${getStealDailyLimit(account)}` : "-";
-  if (els.stealCostValue) els.stealCostValue.textContent = `${formatNum(cost, 18, 0)} TEST`;
+  if (els.stealCostValue) els.stealCostValue.textContent = `${formatNum(cost, 18, 0)} 枚代币`;
   if (els.stealTargetCount) els.stealTargetCount.textContent = `${targets.length} 个推荐目标`;
   if (els.stealHint) {
     els.stealHint.textContent = !userAddress
@@ -1679,7 +1679,7 @@ function handleRedeemGardenConfirm() {
     showStatusModal("暂无可卖土地", "你当前还没有可卖出的土地。", null);
     return;
   }
-  const stakedText = `${formatNum(account.stakedAmount ?? 0n, 18, 0)} TEST`;
+  const stakedText = `${formatNum(account.stakedAmount ?? 0n, 18, 0)} 枚代币`;
   const vegetableText = formatNum(account.vegetableBalance ?? 0n, 18, 2);
   const pendingRewardText = `${formatNum(account.pendingRewardToken ?? 0n, 18, 5)} BNB`;
   showStatusModal(
