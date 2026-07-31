@@ -1654,7 +1654,10 @@ code {
 }
 
 .overview-section #vaultTotalBurned {
-  max-width: 140px;
+  max-width: none;
+  white-space: nowrap;
+  word-break: keep-all;
+  font-size: 14px;
 }
 
 .actions {
