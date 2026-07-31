@@ -378,7 +378,7 @@ function initTopNavView() {
       event.preventDefault();
       setActiveNav(link);
       togglePageView(view);
-      if (userAddress && (view === "steal" || view === "overview")) {
+      if (userAddress && (view === "steal" || view === "overview" || view === "shop" || view === "plant")) {
         refreshAll().catch(() => {});
       }
       const target = href ? document.querySelector(href) : null;
@@ -1424,6 +1424,8 @@ async function refreshAll() {
     const token = new ethers.Contract(CONFIG.tokenAddress, ERC20_ABI, provider);
     const shouldLoadSteal = currentPageView === "steal";
     const shouldLoadOverview = currentPageView === "overview";
+    const shouldLoadShopState = currentPageView === "shop" || currentPageView === "plant";
+    const shouldLoadPlant = currentPageView === "plant";
 
     const currentRoundId = await vault.currentRoundId();
     const [
@@ -1463,8 +1465,8 @@ async function refreshAll() {
       token.balanceOf(DEAD_ADDRESS).catch(() => 0n),
       vault.previewCurrentSellWindow(),
       vault.getUserAccount(userAddress),
-      vault.getBackpack(userAddress),
-      vault.getGoldenCornState(userAddress),
+      shouldLoadShopState ? vault.getBackpack(userAddress) : (latestViewState?.backpack || {}),
+      shouldLoadShopState ? vault.getGoldenCornState(userAddress) : (latestViewState?.goldenCornState || {}),
       vault.getRoundLuckWeight(currentRoundId, userAddress).catch(() => 0n),
       vault.getRoundSnapshot(currentRoundId).catch(() => EMPTY_ROUND_SNAPSHOT),
       vault.getRoundUserState(currentRoundId, userAddress).catch(() => EMPTY_ROUND_USER_STATE),
@@ -1589,9 +1591,9 @@ async function refreshAll() {
     const upgradeCost = account.hasGarden && nextUpgradeableLevel(Number(account.level))
       ? await vault.previewUpgradeCost(Number(account.level), nextUpgradeableLevel(Number(account.level)))
       : 0n;
-    const plots = account.hasGarden
+    const plots = shouldLoadPlant && account.hasGarden
       ? await Promise.all(Array.from({ length: Number(account.plotCount || 0) }, (_, i) => vault.getPlot(userAddress, i)))
-      : [];
+      : (latestViewState?.plots || []);
 
     els.roleCard.textContent = roleText(account);
     els.gardenBadge.textContent = account.hasGarden ? levelText(Number(account.level)) : "游客身份";
