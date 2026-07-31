@@ -213,6 +213,7 @@ let activeStealTarget = "";
 let stealTargetStart = 0;
 let stealTargetLimit = 3;
 let stealShowAllPlots = false;
+let currentPageView = "main";
 let luckyHistoryPage = 0;
 const LUCKY_HISTORY_PAGE_SIZE = 10;
 let statusModalConfirmTask = null;
@@ -335,6 +336,7 @@ function setActiveNav(link) {
 }
 
 function togglePageView(view) {
+  currentPageView = view;
   const showMain = view === "main";
   const showShop = view === "shop";
   const showSteal = view === "steal";
@@ -376,6 +378,9 @@ function initTopNavView() {
       event.preventDefault();
       setActiveNav(link);
       togglePageView(view);
+      if (userAddress && (view === "steal" || view === "overview")) {
+        refreshAll().catch(() => {});
+      }
       const target = href ? document.querySelector(href) : null;
       target?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -1417,6 +1422,8 @@ async function refreshAll() {
     const network = await provider.getNetwork();
     const vault = new ethers.Contract(CONFIG.vaultAddress, VAULT_ABI, provider);
     const token = new ethers.Contract(CONFIG.tokenAddress, ERC20_ABI, provider);
+    const shouldLoadSteal = currentPageView === "steal";
+    const shouldLoadOverview = currentPageView === "overview";
 
     const currentRoundId = await vault.currentRoundId();
     const [
@@ -1471,8 +1478,8 @@ async function refreshAll() {
       })),
       vault.stealBurnCostOverride().catch(() => 0n),
       vault.superGardenCount().catch(() => 0),
-      vault.getActiveGardenUserCount().catch(() => 0n),
-      vault.getActiveGardenUsers(stealTargetStart, stealTargetLimit).catch(() => []),
+      shouldLoadOverview ? vault.getActiveGardenUserCount().catch(() => 0n) : 0n,
+      shouldLoadSteal ? vault.getActiveGardenUsers(stealTargetStart, stealTargetLimit).catch(() => []) : [],
     ]);
 
     els.factoryAddress.textContent = CONFIG.factoryAddress;
@@ -1497,30 +1504,32 @@ async function refreshAll() {
     if (els.vaultTotalBurned) els.vaultTotalBurned.textContent = `${formatNum(deadTokenBalance, decimals, 0)} ${symbol}`;
     if (els.legendGardenRemain) els.legendGardenRemain.textContent = String(Math.max(0, 10 - Number(superGardenCount || 0)));
 
-    const allActiveGardenUsers = Number(activeGardenUserCount) > 0 ? await vault.getActiveGardenUsers(0, activeGardenUserCount).catch(() => []) : [];
-    const playerAccounts = (await Promise.all(allActiveGardenUsers.map(async (address) => {
-      try {
-        return await vault.getUserAccount(address);
-      } catch {
-        return null;
-      }
-    }))).filter(Boolean);
-    const playerOverview = playerAccounts.reduce((acc, item) => {
-      acc.totalStaked += item.stakedAmount ?? 0n;
-      const level = Number(item.level || 0);
-      if (level === 4) acc.legendUsers += 1;
-      else if (level === 3) acc.harvestUsers += 1;
-      else if (level === 2) acc.qualityUsers += 1;
-      else if (level === 1) acc.normalUsers += 1;
-      return acc;
-    }, { totalStaked: 0n, legendUsers: 0, harvestUsers: 0, qualityUsers: 0, normalUsers: 0 });
+    if (shouldLoadOverview) {
+      const allActiveGardenUsers = Number(activeGardenUserCount) > 0 ? await vault.getActiveGardenUsers(0, activeGardenUserCount).catch(() => []) : [];
+      const playerAccounts = (await Promise.all(allActiveGardenUsers.map(async (address) => {
+        try {
+          return await vault.getUserAccount(address);
+        } catch {
+          return null;
+        }
+      }))).filter(Boolean);
+      const playerOverview = playerAccounts.reduce((acc, item) => {
+        acc.totalStaked += item.stakedAmount ?? 0n;
+        const level = Number(item.level || 0);
+        if (level === 4) acc.legendUsers += 1;
+        else if (level === 3) acc.harvestUsers += 1;
+        else if (level === 2) acc.qualityUsers += 1;
+        else if (level === 1) acc.normalUsers += 1;
+        return acc;
+      }, { totalStaked: 0n, legendUsers: 0, harvestUsers: 0, qualityUsers: 0, normalUsers: 0 });
 
-    if (els.playerTotalUsers) els.playerTotalUsers.textContent = `${allActiveGardenUsers.length} 个`;
-    if (els.playerTotalStaked) els.playerTotalStaked.textContent = `${formatNum(playerOverview.totalStaked, decimals, 0)} ${symbol}`;
-    if (els.playerLegendUsers) els.playerLegendUsers.textContent = `${playerOverview.legendUsers} 个`;
-    if (els.playerHarvestUsers) els.playerHarvestUsers.textContent = `${playerOverview.harvestUsers} 个`;
-    if (els.playerQualityUsers) els.playerQualityUsers.textContent = `${playerOverview.qualityUsers} 个`;
-    if (els.playerNormalUsers) els.playerNormalUsers.textContent = `${playerOverview.normalUsers} 个`;
+      if (els.playerTotalUsers) els.playerTotalUsers.textContent = `${allActiveGardenUsers.length} 个`;
+      if (els.playerTotalStaked) els.playerTotalStaked.textContent = `${formatNum(playerOverview.totalStaked, decimals, 0)} ${symbol}`;
+      if (els.playerLegendUsers) els.playerLegendUsers.textContent = `${playerOverview.legendUsers} 个`;
+      if (els.playerHarvestUsers) els.playerHarvestUsers.textContent = `${playerOverview.harvestUsers} 个`;
+      if (els.playerQualityUsers) els.playerQualityUsers.textContent = `${playerOverview.qualityUsers} 个`;
+      if (els.playerNormalUsers) els.playerNormalUsers.textContent = `${playerOverview.normalUsers} 个`;
+    }
 
     const inWindow = sellWindow[3];
     const activityRoundId = Number(pendingFridayRoundId) > 0 && Number(pendingFridayRoundId) !== Number(currentRoundId) ? pendingFridayRoundId : currentRoundId;
@@ -1588,21 +1597,25 @@ async function refreshAll() {
     els.gardenBadge.textContent = account.hasGarden ? levelText(Number(account.level)) : "游客身份";
     els.marketBadge.textContent = inWindow ? "卖菜中" : Number(pendingFridayRoundId) > 0 ? "待开奖" : "准备中";
     els.growthScore.textContent = growthValue(account);
-    const stealTargets = (await Promise.all(
-      stealAddresses.filter((addr) => addr.toLowerCase() !== userAddress.toLowerCase()).map(async (address) => {
-        try {
-          const targetAccount = await vault.getUserAccount(address);
-          const targetPlots = await Promise.all(Array.from({ length: Number(targetAccount.plotCount || 0) }, (_, i) => vault.getPlot(address, i)));
-          return { address, account: targetAccount, plots: targetPlots, signals: getStealTargetSignals(targetAccount, targetPlots) };
-        } catch {
-          return null;
-        }
-      })
-    )).filter((item) => item && (item.signals.stealableCount > 0 || item.signals.soonCount > 0))
-      .sort((a, b) => b.signals.stealableCount - a.signals.stealableCount || b.signals.soonCount - a.signals.soonCount);
-    if (!stealTargets.some((item) => item.address === activeStealTarget)) activeStealTarget = stealTargets[0]?.address || "";
-    const selectedStealTarget = stealTargets.find((item) => item.address === activeStealTarget);
-    const selectedStealPlots = selectedStealTarget?.plots || [];
+    const stealTargets = shouldLoadSteal
+      ? (await Promise.all(
+          stealAddresses.filter((addr) => addr.toLowerCase() !== userAddress.toLowerCase()).map(async (address) => {
+            try {
+              const targetAccount = await vault.getUserAccount(address);
+              const targetPlots = await Promise.all(Array.from({ length: Number(targetAccount.plotCount || 0) }, (_, i) => vault.getPlot(address, i)));
+              return { address, account: targetAccount, plots: targetPlots, signals: getStealTargetSignals(targetAccount, targetPlots) };
+            } catch {
+              return null;
+            }
+          })
+        )).filter((item) => item && (item.signals.stealableCount > 0 || item.signals.soonCount > 0))
+          .sort((a, b) => b.signals.stealableCount - a.signals.stealableCount || b.signals.soonCount - a.signals.soonCount)
+      : (latestViewState?.steal?.targets || []);
+    if (shouldLoadSteal && !stealTargets.some((item) => item.address === activeStealTarget)) activeStealTarget = stealTargets[0]?.address || "";
+    const selectedStealTarget = shouldLoadSteal
+      ? stealTargets.find((item) => item.address === activeStealTarget)
+      : latestViewState?.steal?.targets?.find((item) => item.address === activeStealTarget);
+    const selectedStealPlots = selectedStealTarget?.plots || latestViewState?.steal?.targetPlots || [];
     latestViewState = {
       account,
       backpack,
