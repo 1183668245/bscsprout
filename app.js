@@ -1627,6 +1627,7 @@ async function refreshAll() {
       allowance,
       symbol,
       inWindow,
+      currentRoundId,
       steal: {
         cost: stealBurnCostOverride === 0n ? ethers.parseUnits("500", 18) : stealBurnCostOverride,
         totalTargets: stealTargets.length,
@@ -1651,6 +1652,7 @@ async function refreshAll() {
         boardRoundId,
         boardEntries: activityBoard,
       },
+      seedConfigs,
     };
 
     updateGardenActionButtons(account, { tokenBalance, allowance, purchaseStates, upgradeCost });
@@ -1735,7 +1737,21 @@ els.buySeedBtns?.forEach((btn) => {
 els.seedQtyBtns?.forEach((btn) => {
   btn.addEventListener("click", () => {
     setSeedQuantity(Number(btn.dataset.seedType), btn.dataset.seedQty === "max" ? "max" : Number(btn.dataset.seedQty));
-    refreshAll();
+    if (!latestViewState) {
+      refreshAll().catch(() => {});
+      return;
+    }
+    updateSeedShop(
+      latestViewState.account,
+      latestViewState.backpack,
+      latestViewState.goldenCornState,
+      latestViewState.currentRoundId ?? 0n,
+      latestViewState.seedConfigs || [],
+      latestViewState.tokenBalance,
+      latestViewState.allowance,
+      latestViewState.symbol,
+      latestViewState.inWindow,
+    );
   });
 });
 els.utilityBtns?.forEach((btn) => {
