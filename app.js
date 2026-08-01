@@ -993,12 +993,18 @@ async function tryRestoreSession(refresh = true) {
 
   userAddress = accounts[0];
   signer = await provider.getSigner(userAddress);
-  els.connectBtn.textContent = short(userAddress);
-
-  if (refresh) {
-    await refreshAll();
+  if (!refresh) {
+    els.connectBtn.textContent = short(userAddress);
+    return true;
   }
-  return true;
+  els.connectBtn.textContent = "同步中...";
+  const synced = await refreshAll();
+  if (synced) {
+    els.connectBtn.textContent = short(userAddress);
+    return true;
+  }
+  els.connectBtn.textContent = "重试同步";
+  return false;
 }
 
 function log(msg) {
@@ -1404,9 +1410,15 @@ async function connectWallet() {
   try {
     await ensureWallet();
     await ensureCorrectChain();
+    els.connectBtn.textContent = "同步中...";
+    const synced = await refreshAll();
+    if (!synced) {
+      els.connectBtn.textContent = "重试同步";
+      log(`钱包已连接，但状态同步失败: ${userAddress}`);
+      return;
+    }
     els.connectBtn.textContent = short(userAddress);
     log(`钱包已连接: ${userAddress}`);
-    await refreshAll();
   } catch (err) {
     log(`连接失败: ${err.message || err}`);
   }
@@ -1664,6 +1676,7 @@ async function refreshAll(allowRetry = true) {
     renderStealPage(latestViewState.steal);
 
     log("状态已刷新");
+    return true;
   } catch (err) {
     log(`刷新失败: ${err.message || err}`);
     if (allowRetry && window.ethereum && userAddress) {
@@ -1672,6 +1685,7 @@ async function refreshAll(allowRetry = true) {
       provider = new ethers.BrowserProvider(window.ethereum);
       return refreshAll(false);
     }
+    return false;
   }
 }
 
