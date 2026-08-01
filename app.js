@@ -1392,6 +1392,8 @@ async function ensureCorrectChain() {
       method: "wallet_switchEthereumChain",
       params: [{ chainId: `0x${CONFIG.chainId.toString(16)}` }],
     });
+    await wait(400);
+    provider = new ethers.BrowserProvider(window.ethereum);
   } catch (err) {
     log(`切换网络失败: ${err.message || err}`);
     throw err;
@@ -1410,7 +1412,7 @@ async function connectWallet() {
   }
 }
 
-async function refreshAll() {
+async function refreshAll(allowRetry = true) {
   try {
     if (!provider || !userAddress) {
       const restored = await tryRestoreSession(false);
@@ -1664,6 +1666,12 @@ async function refreshAll() {
     log("状态已刷新");
   } catch (err) {
     log(`刷新失败: ${err.message || err}`);
+    if (allowRetry && window.ethereum && userAddress) {
+      log("检测到钱包响应延迟，正在重试一次");
+      await wait(700);
+      provider = new ethers.BrowserProvider(window.ethereum);
+      return refreshAll(false);
+    }
   }
 }
 
