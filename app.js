@@ -215,6 +215,7 @@ let stealTargetLimit = 3;
 let stealShowAllPlots = false;
 let currentPageView = "main";
 let plantPageStatus = "idle";
+let plantPlotsCache = [];
 let luckyHistoryPage = 0;
 const LUCKY_HISTORY_PAGE_SIZE = 10;
 let statusModalConfirmTask = null;
@@ -829,21 +830,23 @@ function renderBulkPlantModal() {
 async function refreshPlantPageData() {
   if (!latestViewState?.account?.hasGarden || !provider || !userAddress) {
     plantPageStatus = "idle";
+    plantPlotsCache = [];
     return false;
   }
   if (plantPageStatus === "loading") return false;
-  plantPageStatus = "loading";
-  renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, latestViewState.plots || []);
+  plantPageStatus = plantPlotsCache.length ? "ready" : "loading";
+  renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, plantPlotsCache);
   try {
     const vault = new ethers.Contract(CONFIG.vaultAddress, VAULT_ABI, provider);
     const plots = await Promise.all(Array.from({ length: Number(latestViewState.account.plotCount || 0) }, (_, i) => vault.getPlot(userAddress, i)));
+    plantPlotsCache = plots;
     latestViewState = { ...latestViewState, plots };
     plantPageStatus = "ready";
     renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, plots);
     return true;
   } catch (err) {
-    plantPageStatus = "error";
-    renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, latestViewState.plots || []);
+    plantPageStatus = plantPlotsCache.length ? "ready" : "error";
+    renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, plantPlotsCache);
     log(`种植中心加载失败: ${err.message || err}`);
     return false;
   }
@@ -996,6 +999,7 @@ function setDisconnectedState() {
   activePlantPlotId = null;
   activeStealTarget = "";
   plantPageStatus = "idle";
+  plantPlotsCache = [];
   stealTargetStart = 0;
   stealTargetLimit = 3;
   stealShowAllPlots = false;
@@ -1669,7 +1673,7 @@ async function refreshAll(allowRetry = true) {
     const upgradeCost = account.hasGarden && nextUpgradeableLevel(Number(account.level))
       ? await vault.previewUpgradeCost(Number(account.level), nextUpgradeableLevel(Number(account.level)))
       : 0n;
-    const plots = latestViewState?.plots || [];
+    const plots = plantPlotsCache;
 
     els.roleCard.textContent = roleText(account);
     els.gardenBadge.textContent = account.hasGarden ? levelText(Number(account.level)) : "游客身份";
@@ -1734,10 +1738,14 @@ async function refreshAll(allowRetry = true) {
     updateGardenActionButtons(account, { tokenBalance, allowance, purchaseStates, upgradeCost });
     updateSeedShop(account, backpack, goldenCornState, currentRoundId, seedConfigs, tokenBalance, allowance, symbol, inWindow);
     updateUtilityShop(account, tokenBalance, allowance, symbol, inWindow);
-    if (!account.hasGarden) plantPageStatus = "idle";
-    else if (shouldLoadPlant && !plots.length) plantPageStatus = "loading";
-    renderPlantingCenter(account, backpack, goldenCornState, plots);
-    if (shouldLoadPlant && account.hasGarden && !plots.length) refreshPlantPageData().catch(() => {});
+    if (!account.hasGarden) {
+      plantPageStatus = "idle";
+      plantPlotsCache = [];
+    } else if (!plantPlotsCache.length) {
+      plantPageStatus = "loading";
+    }
+    renderPlantingCenter(account, backpack, goldenCornState, plantPlotsCache);
+    if (shouldLoadPlant && account.hasGarden) refreshPlantPageData().catch(() => {});
     renderStealPage(latestViewState.steal);
 
     log("状态已刷新");
