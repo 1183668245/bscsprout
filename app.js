@@ -214,6 +214,7 @@ let stealTargetStart = 0;
 let stealTargetLimit = 3;
 let stealShowAllPlots = false;
 let currentPageView = "main";
+let plantPageStatus = "idle";
 let luckyHistoryPage = 0;
 const LUCKY_HISTORY_PAGE_SIZE = 10;
 let statusModalConfirmTask = null;
@@ -760,8 +761,17 @@ function renderPlantingCenter(account = {}, backpack = {}, goldenCornState = {},
     els.plantHarvestAllBtn.textContent = harvestablePlotIds.length ? `一键收获 ${harvestablePlotIds.length} 块地` : "暂无可收获";
   }
   if (!els.plotGrid) return;
-  if (!account.hasGarden || !plots.length) {
+  if (!account.hasGarden) {
     els.plotGrid.innerHTML = '<div class="plot-empty">先购买土地后开启你的种植中心</div>';
+    return;
+  }
+  if (!plots.length) {
+    const message = plantPageStatus === "loading"
+      ? "种植中心加载中..."
+      : plantPageStatus === "error"
+        ? "地块加载失败，请点击刷新重试"
+        : "进入种植中心后将自动加载地块";
+    els.plotGrid.innerHTML = `<div class="plot-empty">${message}</div>`;
     return;
   }
   const now = Math.floor(Date.now() / 1000);
@@ -813,6 +823,29 @@ function renderBulkPlantModal() {
     const disabled = !bulkPlantSeedType || !bulkPlantSelectedPlots.length || stock < bulkPlantSelectedPlots.length;
     els.plantBulkStartBtn.disabled = disabled;
     els.plantBulkStartBtn.textContent = stock < bulkPlantSelectedPlots.length && bulkPlantSelectedPlots.length ? "种子不足" : `播种${bulkPlantSelectedPlots.length ? ` ${bulkPlantSelectedPlots.length} 块` : ""}`;
+  }
+}
+
+async function refreshPlantPageData() {
+  if (!latestViewState?.account?.hasGarden || !provider || !userAddress) {
+    plantPageStatus = "idle";
+    return false;
+  }
+  if (plantPageStatus === "loading") return false;
+  plantPageStatus = "loading";
+  renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, latestViewState.plots || []);
+  try {
+    const vault = new ethers.Contract(CONFIG.vaultAddress, VAULT_ABI, provider);
+    const plots = await Promise.all(Array.from({ length: Number(latestViewState.account.plotCount || 0) }, (_, i) => vault.getPlot(userAddress, i)));
+    latestViewState = { ...latestViewState, plots };
+    plantPageStatus = "ready";
+    renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, plots);
+    return true;
+  } catch (err) {
+    plantPageStatus = "error";
+    renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, latestViewState.plots || []);
+    log(`种植中心加载失败: ${err.message || err}`);
+    return false;
   }
 }
 
@@ -962,6 +995,7 @@ function setDisconnectedState() {
   latestViewState = null;
   activePlantPlotId = null;
   activeStealTarget = "";
+  plantPageStatus = "idle";
   stealTargetStart = 0;
   stealTargetLimit = 3;
   stealShowAllPlots = false;
@@ -1635,9 +1669,7 @@ async function refreshAll(allowRetry = true) {
     const upgradeCost = account.hasGarden && nextUpgradeableLevel(Number(account.level))
       ? await vault.previewUpgradeCost(Number(account.level), nextUpgradeableLevel(Number(account.level)))
       : 0n;
-    const plots = shouldLoadPlant && account.hasGarden
-      ? await Promise.all(Array.from({ length: Number(account.plotCount || 0) }, (_, i) => vault.getPlot(userAddress, i)))
-      : (latestViewState?.plots || []);
+    const plots = latestViewState?.plots || [];
 
     els.roleCard.textContent = roleText(account);
     els.gardenBadge.textContent = account.hasGarden ? levelText(Number(account.level)) : "游客身份";
@@ -1702,7 +1734,10 @@ async function refreshAll(allowRetry = true) {
     updateGardenActionButtons(account, { tokenBalance, allowance, purchaseStates, upgradeCost });
     updateSeedShop(account, backpack, goldenCornState, currentRoundId, seedConfigs, tokenBalance, allowance, symbol, inWindow);
     updateUtilityShop(account, tokenBalance, allowance, symbol, inWindow);
+    if (!account.hasGarden) plantPageStatus = "idle";
+    else if (shouldLoadPlant && !plots.length) plantPageStatus = "loading";
     renderPlantingCenter(account, backpack, goldenCornState, plots);
+    if (shouldLoadPlant && account.hasGarden && !plots.length) refreshPlantPageData().catch(() => {});
     renderStealPage(latestViewState.steal);
 
     log("状态已刷新");
