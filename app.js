@@ -378,7 +378,7 @@ function initTopNavView() {
       event.preventDefault();
       setActiveNav(link);
       togglePageView(view);
-      if (userAddress && (view === "steal" || view === "overview" || view === "shop" || view === "plant")) {
+      if (userAddress && (view === "steal" || view === "overview" || view === "shop" || view === "plant" || view === "activity" || view === "lucky")) {
         refreshAll().catch(() => {});
       }
       const target = href ? document.querySelector(href) : null;
@@ -1442,6 +1442,8 @@ async function refreshAll(allowRetry = true) {
     const shouldLoadOverview = currentPageView === "overview";
     const shouldLoadShopState = currentPageView === "shop" || currentPageView === "plant";
     const shouldLoadPlant = currentPageView === "plant";
+    const shouldLoadActivity = currentPageView === "activity";
+    const shouldLoadLucky = currentPageView === "lucky";
 
     const currentRoundId = await vault.currentRoundId();
     const [
@@ -1483,9 +1485,9 @@ async function refreshAll(allowRetry = true) {
       vault.getUserAccount(userAddress),
       shouldLoadShopState ? vault.getBackpack(userAddress) : (latestViewState?.backpack || {}),
       shouldLoadShopState ? vault.getGoldenCornState(userAddress) : (latestViewState?.goldenCornState || {}),
-      vault.getRoundLuckWeight(currentRoundId, userAddress).catch(() => 0n),
-      vault.getRoundSnapshot(currentRoundId).catch(() => EMPTY_ROUND_SNAPSHOT),
-      vault.getRoundUserState(currentRoundId, userAddress).catch(() => EMPTY_ROUND_USER_STATE),
+      shouldLoadLucky ? vault.getRoundLuckWeight(currentRoundId, userAddress).catch(() => 0n) : (latestViewState?.lucky?.myWeight || 0n),
+      (shouldLoadActivity || shouldLoadLucky) ? vault.getRoundSnapshot(currentRoundId).catch(() => EMPTY_ROUND_SNAPSHOT) : (latestViewState?.activity?.snapshot || latestViewState?.lucky?.snapshot || EMPTY_ROUND_SNAPSHOT),
+      shouldLoadActivity ? vault.getRoundUserState(currentRoundId, userAddress).catch(() => EMPTY_ROUND_USER_STATE) : (latestViewState?.activity?.userState || EMPTY_ROUND_USER_STATE),
       Promise.all([1, 2, 3, 4].map(async (level) => {
         const [requiredStake] = await vault.previewCreateGardenStake(level);
         return { level, requiredStake };
@@ -1551,26 +1553,36 @@ async function refreshAll(allowRetry = true) {
 
     const inWindow = sellWindow[3];
     const activityRoundId = Number(pendingFridayRoundId) > 0 && Number(pendingFridayRoundId) !== Number(currentRoundId) ? pendingFridayRoundId : currentRoundId;
-    const activityRoundSnapshot = Number(activityRoundId) === Number(currentRoundId)
-      ? currentRoundSnapshot
-      : await vault.getRoundSnapshot(activityRoundId).catch(() => EMPTY_ROUND_SNAPSHOT);
+    const activityRoundSnapshot = shouldLoadActivity
+      ? (Number(activityRoundId) === Number(currentRoundId)
+          ? currentRoundSnapshot
+          : await vault.getRoundSnapshot(activityRoundId).catch(() => EMPTY_ROUND_SNAPSHOT))
+      : (latestViewState?.activity?.snapshot || EMPTY_ROUND_SNAPSHOT);
     const boardRoundId = inWindow ? currentRoundId : (Number(pendingFridayRoundId) > 0 ? pendingFridayRoundId : (currentRoundId > 1n ? currentRoundId - 1n : currentRoundId));
-    const activityBoard = await vault.queryFilter(vault.filters.VegetablesSold(null, boardRoundId)).then((logs) => logs.map((log) => ({ user: log.args.user, frozenVegetable: log.args.frozenVegetable, rewardAmount: log.args.rewardAmount })).sort((a, b) => (a.rewardAmount === b.rewardAmount ? 0 : a.rewardAmount > b.rewardAmount ? -1 : 1)).slice(0, 10)).catch(() => []);
+    const activityBoard = shouldLoadActivity
+      ? await vault.queryFilter(vault.filters.VegetablesSold(null, boardRoundId)).then((logs) => logs.map((log) => ({ user: log.args.user, frozenVegetable: log.args.frozenVegetable, rewardAmount: log.args.rewardAmount })).sort((a, b) => (a.rewardAmount === b.rewardAmount ? 0 : a.rewardAmount > b.rewardAmount ? -1 : 1)).slice(0, 10)).catch(() => [])
+      : (latestViewState?.activity?.boardEntries || []);
     const luckyRoundId = Number(pendingFridayRoundId) > 0 ? pendingFridayRoundId : currentRoundId;
-    const luckySnapshot = Number(luckyRoundId) === Number(currentRoundId) ? currentRoundSnapshot : await vault.getRoundSnapshot(luckyRoundId).catch(() => EMPTY_ROUND_SNAPSHOT);
-    const luckyMyWeight = await vault.getRoundLuckWeight(luckyRoundId, userAddress).catch(() => 0n);
+    const luckySnapshot = shouldLoadLucky
+      ? (Number(luckyRoundId) === Number(currentRoundId) ? currentRoundSnapshot : await vault.getRoundSnapshot(luckyRoundId).catch(() => EMPTY_ROUND_SNAPSHOT))
+      : (latestViewState?.lucky?.snapshot || EMPTY_ROUND_SNAPSHOT);
+    const luckyMyWeight = shouldLoadLucky
+      ? await vault.getRoundLuckWeight(luckyRoundId, userAddress).catch(() => 0n)
+      : (latestViewState?.lucky?.myWeight || 0n);
     const historyStart = Math.max(1, Number(currentRoundId) - 30);
-    const luckyHistory = (await Promise.all(Array.from({ length: Math.max(0, Number(currentRoundId) - historyStart) }, (_, i) => Number(currentRoundId) - 1 - i).map(async (roundId) => {
-      const snapshot = await vault.getRoundSnapshot(roundId).catch(() => EMPTY_ROUND_SNAPSHOT);
-      if (!snapshot.lotterySettled || !snapshot.lotteryWinner || snapshot.lotteryWinner === ethers.ZeroAddress) return null;
-      return {
-        roundId,
-        winner: snapshot.lotteryWinner,
-        reward: snapshot.lotteryBudget ?? 0n,
-        statusText: Number(snapshot.lotteryStatus || 0) === 2 ? "已开奖" : "已结算",
-        settledAtText: Number(snapshot.settledAt || 0) > 0 ? formatTimePoint(Number(snapshot.settledAt || 0)) : "-",
-      };
-    }))).filter(Boolean);
+    const luckyHistory = shouldLoadLucky
+      ? (await Promise.all(Array.from({ length: Math.max(0, Number(currentRoundId) - historyStart) }, (_, i) => Number(currentRoundId) - 1 - i).map(async (roundId) => {
+          const snapshot = await vault.getRoundSnapshot(roundId).catch(() => EMPTY_ROUND_SNAPSHOT);
+          if (!snapshot.lotterySettled || !snapshot.lotteryWinner || snapshot.lotteryWinner === ethers.ZeroAddress) return null;
+          return {
+            roundId,
+            winner: snapshot.lotteryWinner,
+            reward: snapshot.lotteryBudget ?? 0n,
+            statusText: Number(snapshot.lotteryStatus || 0) === 2 ? "已开奖" : "已结算",
+            settledAtText: Number(snapshot.settledAt || 0) > 0 ? formatTimePoint(Number(snapshot.settledAt || 0)) : "-",
+          };
+        }))).filter(Boolean)
+      : (latestViewState?.lucky?.history || []);
     if (els.sellWindowState) els.sellWindowState.textContent = inWindow ? "卖菜中" : "未开市";
     const nextSellWindowStart = getNextSellWindowStart(sellWindow[0], Math.floor(Date.now() / 1000));
     if (els.activityWindowTime) els.activityWindowTime.textContent = "";
