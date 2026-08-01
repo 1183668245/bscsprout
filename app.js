@@ -216,6 +216,7 @@ let stealShowAllPlots = false;
 let currentPageView = "main";
 let plantPageStatus = "idle";
 let plantPlotsCache = [];
+let plantPageLoadingPromise = null;
 let luckyHistoryPage = 0;
 const LUCKY_HISTORY_PAGE_SIZE = 10;
 let statusModalConfirmTask = null;
@@ -831,25 +832,31 @@ async function refreshPlantPageData() {
   if (!latestViewState?.account?.hasGarden || !provider || !userAddress) {
     plantPageStatus = "idle";
     plantPlotsCache = [];
+    plantPageLoadingPromise = null;
     return false;
   }
-  if (plantPageStatus === "loading") return false;
+  if (plantPageLoadingPromise) return plantPageLoadingPromise;
   plantPageStatus = plantPlotsCache.length ? "ready" : "loading";
   renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, plantPlotsCache);
-  try {
-    const vault = new ethers.Contract(CONFIG.vaultAddress, VAULT_ABI, provider);
-    const plots = await Promise.all(Array.from({ length: Number(latestViewState.account.plotCount || 0) }, (_, i) => vault.getPlot(userAddress, i)));
-    plantPlotsCache = plots;
-    latestViewState = { ...latestViewState, plots };
-    plantPageStatus = "ready";
-    renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, plots);
-    return true;
-  } catch (err) {
-    plantPageStatus = plantPlotsCache.length ? "ready" : "error";
-    renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, plantPlotsCache);
-    log(`种植中心加载失败: ${err.message || err}`);
-    return false;
-  }
+  plantPageLoadingPromise = (async () => {
+    try {
+      const vault = new ethers.Contract(CONFIG.vaultAddress, VAULT_ABI, provider);
+      const plots = await Promise.all(Array.from({ length: Number(latestViewState.account.plotCount || 0) }, (_, i) => vault.getPlot(userAddress, i)));
+      plantPlotsCache = plots;
+      latestViewState = { ...latestViewState, plots };
+      plantPageStatus = "ready";
+      renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, plots);
+      return true;
+    } catch (err) {
+      plantPageStatus = plantPlotsCache.length ? "ready" : "error";
+      renderPlantingCenter(latestViewState.account, latestViewState.backpack, latestViewState.goldenCornState, plantPlotsCache);
+      log(`种植中心加载失败: ${err.message || err}`);
+      return false;
+    } finally {
+      plantPageLoadingPromise = null;
+    }
+  })();
+  return plantPageLoadingPromise;
 }
 
 function getNextSellWindowStart(startAt, now) {
@@ -1000,6 +1007,7 @@ function setDisconnectedState() {
   activeStealTarget = "";
   plantPageStatus = "idle";
   plantPlotsCache = [];
+  plantPageLoadingPromise = null;
   stealTargetStart = 0;
   stealTargetLimit = 3;
   stealShowAllPlots = false;
