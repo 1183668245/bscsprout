@@ -1007,6 +1007,22 @@ async function tryRestoreSession(refresh = true) {
   return false;
 }
 
+async function rebuildWalletContext() {
+  if (!window.ethereum) return false;
+  provider = undefined;
+  signer = undefined;
+  await wait(180);
+  provider = new ethers.BrowserProvider(window.ethereum);
+  const accounts = await window.ethereum.request({ method: "eth_accounts" });
+  if (!accounts?.length) {
+    setDisconnectedState();
+    return false;
+  }
+  userAddress = accounts[0];
+  signer = await provider.getSigner(userAddress);
+  return true;
+}
+
 function log(msg) {
   const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
   els.logBox.textContent = `[${time}] ${msg}\n` + els.logBox.textContent;
@@ -1694,11 +1710,15 @@ async function refreshAll(allowRetry = true) {
   } catch (err) {
     log(`刷新失败: ${err.message || err}`);
     if (allowRetry && window.ethereum && userAddress) {
-      log("检测到钱包响应延迟，正在重试一次");
-      await wait(700);
-      provider = new ethers.BrowserProvider(window.ethereum);
-      return refreshAll(false);
+      log("检测到钱包会话异常，正在重建连接后重试");
+      const rebuilt = await rebuildWalletContext().catch(() => false);
+      if (rebuilt) {
+        await wait(500);
+        return refreshAll(false);
+      }
     }
+    provider = undefined;
+    signer = undefined;
     return false;
   }
 }
