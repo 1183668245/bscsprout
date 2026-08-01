@@ -1154,6 +1154,7 @@ async function withButtonLoading(btn, task, options = {}) {
     pendingLabel = "请在钱包确认",
     submittedLabel = "链上确认中",
     autoRefresh = true,
+    preserveText = false,
   } = options;
   const originalText = btn.textContent;
   activeButtonPhase = {
@@ -1168,7 +1169,8 @@ async function withButtonLoading(btn, task, options = {}) {
     return await task();
   } finally {
     btn.classList.remove("is-loading");
-    activeButtonPhase?.reset();
+    btn.disabled = false;
+    if (!preserveText) activeButtonPhase?.reset();
     activeButtonPhase = null;
     if (autoRefresh) await refreshAll().catch(() => {});
   }
@@ -1741,7 +1743,12 @@ els.topbarHomeLink?.addEventListener("click", (event) => {
 els.scrollTopBtn?.addEventListener("click", () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
-els.connectBtn.addEventListener("click", () => withButtonLoading(els.connectBtn, connectWallet));
+els.connectBtn.addEventListener("click", () => withButtonLoading(els.connectBtn, connectWallet, {
+  pendingLabel: "同步中...",
+  submittedLabel: "同步中...",
+  autoRefresh: false,
+  preserveText: true,
+}));
 els.refreshBtn?.addEventListener("click", () => withButtonLoading(els.refreshBtn, refreshAll, { pendingLabel: "刷新中", submittedLabel: "刷新中", autoRefresh: false }));
 els.refreshBtnGarden?.addEventListener("click", () => withButtonLoading(els.refreshBtnGarden, refreshAll, { pendingLabel: "刷新中", submittedLabel: "刷新中", autoRefresh: false }));
 els.claimBtn?.addEventListener("click", () => handleClaimRewards(els.claimBtn));
