@@ -562,6 +562,7 @@ code {
 }
 
 .activity-page--market #activityBoardBody,
+.activity-page--market #activityMyHistoryBody,
 .activity-page--lucky #luckyHistoryBody {
   max-height: 520px;
   overflow: auto;
@@ -611,6 +612,26 @@ code {
 .activity-board-rank {
   color: var(--green);
   font-weight: 800;
+}
+
+.activity-grid--history {
+  margin-bottom: 12px;
+}
+
+.activity-history-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255,255,255,.02);
+}
+
+.activity-history-row.is-head {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .steal-layout {
