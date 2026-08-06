@@ -34,6 +34,7 @@ const VAULT_ABI = [
   "function steal(address target, uint8 plotId)",
   "function createGarden(uint8 level)",
   "function plant(uint8 plotId, uint8 seedType)",
+  "function plantAllEmpty(uint8 seedType)",
   "function harvest(uint8 plotId)",
   "function harvestBatch(uint8[] plotIds)",
   "function buySeeds(uint8 seedType, uint256 amount)",
@@ -208,7 +209,6 @@ let latestViewState = null;
 let activePlantPlotId = null;
 let bulkPlantModalOpen = false;
 let bulkPlantSeedType = 0;
-let bulkPlantSelectedPlots = [];
 let activeStealTarget = "";
 let stealTargetStart = 0;
 let stealTargetLimit = 3;
@@ -755,8 +755,9 @@ function renderPlantingCenter(account = {}, backpack = {}, goldenCornState = {},
   const plantableOptions = getPlantableSeedOptions(account, backpack);
   if (els.plantBulkBtn) {
     const canBulkPlant = Boolean(account.hasGarden && emptyPlotIds.length && plantableOptions.length);
+    const selectedSeedName = bulkPlantSeedType ? SEED_LABELS[bulkPlantSeedType] : "";
     els.plantBulkBtn.disabled = !canBulkPlant;
-    els.plantBulkBtn.textContent = !account.hasGarden ? "先购买土地" : !emptyPlotIds.length ? "暂无空地" : !plantableOptions.length ? "背包暂无种子" : "批量种植";
+    els.plantBulkBtn.textContent = !account.hasGarden ? "先购买土地" : !emptyPlotIds.length ? "暂无空地" : !plantableOptions.length ? "背包暂无种子" : !bulkPlantSeedType ? "先选种子再一键种植" : `一键种满${selectedSeedName}`;
   }
   if (els.plantHarvestAllBtn) {
     els.plantHarvestAllBtn.disabled = harvestablePlotIds.length === 0;
@@ -1428,6 +1429,7 @@ async function handlePlotAction(plotId, action, seedType) {
     }
     const selected = options.find((item) => item.seedType === Number(seedType));
     if (!selected) throw new Error("当前种子不可种植或库存不足");
+    bulkPlantSeedType = Number(selected.seedType);
     const isEmptyPlot = Number(plot.seedType) === 0 || plot.harvested || Number(plot.boundGardenVersion) !== Number(account.gardenVersion);
     if (!isEmptyPlot) throw new Error("这块地当前不是空地，不能重复种植");
     if (els.plantSeedModalTitle) els.plantSeedModalTitle.textContent = `${plotId + 1} 号地正在准备种植 ${SEED_LABELS[selected.seedType]}`;
@@ -1874,52 +1876,46 @@ function openBulkPlantModal() {
     openGardenSection();
     return;
   }
-  bulkPlantModalOpen = true;
-  activePlantPlotId = null;
-  bulkPlantSeedType = 0;
-  bulkPlantSelectedPlots = [];
-  rerenderLiveState();
+  const options = getPlantableSeedOptions(latestViewState.account, latestViewState.backpack);
+  if (!options.length) {
+    openShopSection();
+    showToast("暂无可种植种子", "背包里还没有可种植种子，已自动跳转到小卖铺。");
+    return;
+  }
+  if (!bulkPlantSeedType || !options.some((item) => Number(item.seedType) === Number(bulkPlantSeedType))) {
+    bulkPlantSeedType = Number(options[0].seedType);
+  }
+  showStatusModal("一键种满空地", `已选择 ${SEED_LABELS[bulkPlantSeedType]}，确认后一笔交易自动种满当前所有空地。`, () => withButtonLoading(els.statusModalConfirmBtn, handleBulkPlantStart), "立即种植", { hint: "一次签名" });
 }
 
 function closeBulkPlantModal() {
   bulkPlantModalOpen = false;
-  bulkPlantSeedType = 0;
-  bulkPlantSelectedPlots = [];
   rerenderLiveState();
 }
 
 async function handleBulkPlantStart() {
   try {
-    if (!bulkPlantSeedType) throw new Error("请先选择一个种子");
+    if (!bulkPlantSeedType) throw new Error("请先在单块种植时选定一个种子");
     const seedType = Number(bulkPlantSeedType);
     const seedName = SEED_LABELS[seedType] || "该种子";
-    const plotIds = [...bulkPlantSelectedPlots].sort((a, b) => a - b);
-    if (!plotIds.length) throw new Error("请至少选择一块空地");
-    closeBulkPlantModal();
     await ensureWallet();
     await ensureCorrectChain();
     const vault = new ethers.Contract(CONFIG.vaultAddress, VAULT_ABI, signer);
-    const [account, backpack] = await Promise.all([vault.getUserAccount(userAddress), vault.getBackpack(userAddress)]);
-    if (getBackpackSeedCount(backpack, seedType) < plotIds.length) throw new Error(`${seedName}库存不足`);
-    for (let i = 0; i < plotIds.length; i += 1) {
-      const plotId = plotIds[i];
-      const plot = await vault.getPlot(userAddress, plotId);
-      const isEmptyPlot = Number(plot.seedType) === 0 || plot.harvested || Number(plot.boundGardenVersion) !== Number(account.gardenVersion);
-      if (!isEmptyPlot) throw new Error(`${plotId + 1} 号地已不是空地`);
-      showBulkPlantProgress(seedName, i + 1, plotIds.length, plotId, "wallet");
-      showToast("请在钱包确认", `正在播种第 ${i + 1}/${plotIds.length} 块地：${plotId + 1} 号地`);
-      const tx = await vault.plant(plotId, seedType);
-      showBulkPlantProgress(seedName, i + 1, plotIds.length, plotId, "chain");
-      await handleSubmittedTx(tx, `播种 ${plotId + 1} 号地`, `播种 ${i + 1}/${plotIds.length} 确认中`);
-    }
-    showBulkPlantProgress(seedName, plotIds.length, plotIds.length, plotIds[plotIds.length - 1], "done");
-    showToast("批量种植完成", `${seedName} 已连续播种 ${plotIds.length} 块地。`);
-    window.setTimeout(hideBulkPlantProgress, 1200);
+    const [account, backpack, plots] = await Promise.all([
+      vault.getUserAccount(userAddress),
+      vault.getBackpack(userAddress),
+      latestViewState?.account?.hasGarden ? Promise.all(Array.from({ length: Number(latestViewState.account.plotCount || 0) }, (_, i) => vault.getPlot(userAddress, i))) : [],
+    ]);
+    if (!account.hasGarden) throw new Error("请先购买土地，再来一键种植");
+    if (getBackpackSeedCount(backpack, seedType) <= 0) throw new Error(`${seedName}库存不足`);
+    const emptyPlotIds = getEmptyPlantPlotIds(account, plots);
+    if (!emptyPlotIds.length) throw new Error("当前没有空地可种植");
+    log(`准备一键种满空地: ${seedName}`);
+    const tx = await vault.plantAllEmpty(seedType);
+    await handleSubmittedTx(tx, `一键种满${seedName}`);
   } catch (err) {
-    hideBulkPlantProgress();
-    showStatusModal("批量种植失败", err.shortMessage || err.message || String(err), null, "", { hint: "已中断" });
-    showToast("批量种植失败", err.shortMessage || err.message || String(err));
-    log(`批量种植失败: ${err.shortMessage || err.message || err}`);
+    showToast("一键种植失败", err.shortMessage || err.message || String(err));
+    log(`一键种植失败: ${err.shortMessage || err.message || err}`);
   }
 }
 
