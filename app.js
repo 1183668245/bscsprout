@@ -144,6 +144,10 @@ const els = {
   activityRoundStatus: document.getElementById("activityRoundStatus"),
   activityBoardTitle: document.getElementById("activityBoardTitle"),
   activityBoardBody: document.getElementById("activityBoardBody"),
+  activityMyRewardTotal: document.getElementById("activityMyRewardTotal"),
+  activityMySellCount: document.getElementById("activityMySellCount"),
+  activityMyLatestReward: document.getElementById("activityMyLatestReward"),
+  activityMyHistoryBody: document.getElementById("activityMyHistoryBody"),
   activityUserSoldState: document.getElementById("activityUserSoldState"),
   activityFrozenVegetable: document.getElementById("activityFrozenVegetable"),
   activityExpectedReward: document.getElementById("activityExpectedReward"),
@@ -968,6 +972,15 @@ function renderActivityCenter(activity = {}) {
       : "开市后生成";
   }
 
+  if (els.activityMyRewardTotal) els.activityMyRewardTotal.textContent = `${formatNum(activity.myRewardTotal ?? 0n, 18, 5)} BNB`;
+  if (els.activityMySellCount) els.activityMySellCount.textContent = `${Number(activity.mySellCount || 0)} 次`;
+  if (els.activityMyLatestReward) els.activityMyLatestReward.textContent = activity.myHistory?.length ? `${formatNum(activity.myHistory[0].rewardAmount ?? 0n, 18, 5)} BNB` : "暂无记录";
+  if (els.activityMyHistoryBody) {
+    const rows = activity.myHistory || [];
+    els.activityMyHistoryBody.innerHTML = rows.length
+      ? `<div class="activity-history-row is-head"><div>轮次</div><div>卖出菜量</div><div>实际收益</div><div>时间</div></div>${rows.map((item) => `<div class="activity-history-row"><div>#${item.roundId}</div><div>${formatNum(item.frozenVegetable, 18, 2)}</div><div>${formatNum(item.rewardAmount, 18, 5)} BNB</div><div>${item.timeText || "-"}</div></div>`).join("")}`
+      : '<div class="steal-empty">你还没有卖菜收益记录</div>';
+  }
   if (els.activityBoardTitle) els.activityBoardTitle.textContent = `${Number(activity.boardRoundId || 0)} 轮卖菜收益榜`;
   if (els.activityBoardBody) {
     const rows = activity.boardEntries || [];
@@ -1626,6 +1639,18 @@ async function refreshAll(allowRetry = true) {
     const activityBoard = shouldLoadActivity
       ? await vault.queryFilter(vault.filters.VegetablesSold(null, boardRoundId)).then((logs) => logs.map((log) => ({ user: log.args.user, frozenVegetable: log.args.frozenVegetable, rewardAmount: log.args.rewardAmount })).sort((a, b) => (a.rewardAmount === b.rewardAmount ? 0 : a.rewardAmount > b.rewardAmount ? -1 : 1)).slice(0, 10)).catch(() => [])
       : (latestViewState?.activity?.boardEntries || []);
+    const activityMyLogs = shouldLoadActivity
+      ? await vault.queryFilter(vault.filters.VegetablesSold(userAddress)).catch(() => [])
+      : [];
+    const activityMyHistory = shouldLoadActivity
+      ? activityMyLogs.map((log) => ({ roundId: Number(log.args.roundId || 0), frozenVegetable: log.args.frozenVegetable, rewardAmount: log.args.rewardAmount, timeText: log.blockNumber ? `区块 #${log.blockNumber}` : "-" })).sort((a, b) => b.roundId - a.roundId).slice(0, 10)
+      : (latestViewState?.activity?.myHistory || []);
+    const activityMyRewardTotal = shouldLoadActivity
+      ? activityMyLogs.reduce((sum, log) => sum + (log.args.rewardAmount ?? 0n), 0n)
+      : (latestViewState?.activity?.myRewardTotal || 0n);
+    const activityMySellCount = shouldLoadActivity
+      ? activityMyLogs.length
+      : (latestViewState?.activity?.mySellCount || 0);
     const luckyRoundId = Number(pendingFridayRoundId) > 0 ? pendingFridayRoundId : currentRoundId;
     const luckySnapshot = shouldLoadLucky
       ? (Number(luckyRoundId) === Number(currentRoundId) ? currentRoundSnapshot : await vault.getRoundSnapshot(luckyRoundId).catch(() => EMPTY_ROUND_SNAPSHOT))
@@ -1741,6 +1766,9 @@ async function refreshAll(allowRetry = true) {
         account,
         boardRoundId,
         boardEntries: activityBoard,
+        myHistory: activityMyHistory,
+        myRewardTotal: activityMyRewardTotal,
+        mySellCount: activityMySellCount,
       },
       seedConfigs,
     };
