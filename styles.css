@@ -779,6 +779,14 @@ code {
   background: linear-gradient(180deg, rgba(255,207,92,.08), rgba(255,255,255,.02));
 }
 
+.plant-modal-card--bulk .plant-modal-block {
+  margin-bottom: 12px;
+}
+
+.plant-modal-card--bulk .plant-modal-block .hint {
+  line-height: 1.7;
+}
+
 .plot-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
