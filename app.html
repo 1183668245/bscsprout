@@ -113,7 +113,7 @@
         </div>
       </section>
       <section class="panel">
-        <div class="module-head"><div><div class="panel-title">土地位置</div></div><div class="actions"><button class="btn" id="plantBulkBtn" disabled>批量种植</button><button class="btn" id="plantHarvestAllBtn" disabled>暂无可收获</button></div></div>
+        <div class="module-head"><div><div class="panel-title">土地位置</div></div><div class="actions"><button class="btn" id="plantBulkBtn" disabled>先选种子再一键种植</button><button class="btn" id="plantHarvestAllBtn" disabled>暂无可收获</button></div></div>
         <div class="plot-grid" id="plotGrid"></div>
       </section>
       <div class="plant-modal" id="plantSeedModal" hidden>
@@ -126,10 +126,9 @@
       <div class="plant-modal" id="plantBulkModal" hidden>
         <div class="plant-modal-mask" data-bulk-plant-close="1"></div>
         <div class="plant-modal-card plant-modal-card--bulk">
-          <div class="module-head"><div class="panel-title">批量种植</div><button class="btn" data-bulk-plant-close="1">关闭</button></div>
-          <div class="plant-modal-block"><div class="hint">种子</div><div class="plot-seed-options plot-seed-options--bulk" id="plantBulkSeedOptions"></div></div>
-          <div class="plant-modal-block"><div class="hint">空地</div><div class="bulk-plot-grid" id="plantBulkPlotOptions"></div></div>
-          <div class="actions plant-modal-actions"><button class="btn" id="plantBulkClearBtn" data-bulk-plant-clear="1">清空</button><button class="btn btn-primary" id="plantBulkStartBtn" data-bulk-plant-start="1">播种</button></div>
+          <div class="module-head"><div class="panel-title">一键种植</div><button class="btn" data-bulk-plant-close="1">关闭</button></div>
+          <div class="plant-modal-block"><div class="hint">系统将使用你当前已选中的种子，一次签名自动种满所有空地。</div></div>
+          <div class="actions plant-modal-actions"><button class="btn btn-primary" id="plantBulkStartBtn" data-bulk-plant-start="1">立即一键种植</button></div>
         </div>
       </div>
     </section>
